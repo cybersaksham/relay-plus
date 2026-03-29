@@ -1,0 +1,12 @@
+.DS_Store
+.env
+.env.local
+/backend/.env
+/backend/.env.local
+/frontend/.env
+/frontend/.env.local
+
+/backend/target
+/frontend/.next
+/frontend/node_modules
+/frontend/.vercel
