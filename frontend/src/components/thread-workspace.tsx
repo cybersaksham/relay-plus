@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
   useEffectEvent,
   useMemo,
   useState,
+  useRef,
 } from "react";
 
 import { api } from "@/lib/api";
@@ -15,9 +15,6 @@ import { findString, formatDate } from "@/lib/utils";
 
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Panel } from "./ui/panel";
-import { Tabs } from "./ui/tabs";
-import { Textarea } from "./ui/textarea";
 
 export function ThreadWorkspace({ threadId }: { threadId: string }) {
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
@@ -25,9 +22,21 @@ export function ThreadWorkspace({ threadId }: { threadId: string }) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [streamTab, setStreamTab] = useState("chat");
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Stream state
   const [streamLog, setStreamLog] = useState<string[]>([]);
   const [streamingAssistant, setStreamingAssistant] = useState("");
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingAssistant]);
 
   const loadThread = useCallback(async () => {
     const [thread, threadMessages] = await Promise.all([
@@ -43,9 +52,7 @@ export function ThreadWorkspace({ threadId }: { threadId: string }) {
   }, [loadThread]);
 
   useEffect(() => {
-    if (!detail?.activeJob) {
-      return;
-    }
+    if (!detail?.activeJob) return;
 
     const interval = window.setInterval(() => {
       void loadThread().catch((caughtError: Error) =>
@@ -67,6 +74,7 @@ export function ThreadWorkspace({ threadId }: { threadId: string }) {
     const assistantDelta =
       (data.assistantDelta as string | undefined) ??
       findString(data.raw, ["delta", "text"]);
+      
     if (assistantDelta && payload.eventType.includes("delta")) {
       setStreamingAssistant((current) => current + assistantDelta);
     }
@@ -111,9 +119,7 @@ export function ThreadWorkspace({ threadId }: { threadId: string }) {
 
   async function handleSendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.trim()) {
-      return;
-    }
+    if (!draft.trim()) return;
 
     try {
       setSending(true);
@@ -145,180 +151,119 @@ export function ThreadWorkspace({ threadId }: { threadId: string }) {
   }
 
   const workspaceMap = useMemo(() => {
-    const map = new Map(
-      detail?.threadEnvironments.map((item) => [item.environmentId, item]) ??
-        [],
+    return new Map(
+      detail?.threadEnvironments.map((item) => [item.environmentId, item]) ?? []
     );
-    return map;
   }, [detail]);
 
   return (
-    <main className="rp-page">
-      <div className="rp-shell">
-        <section className="rp-hero">
-          <div className="rp-hero-kicker">Thread workspace</div>
-          <h1 className="rp-hero-title">
-            {detail?.thread.title ?? "Loading thread…"}
-          </h1>
-          <p className="rp-hero-copy">
-            Send follow-up prompts into the same Codex session and keep the
-            entire multi-repo workspace scoped to one writable sandbox root.
-          </p>
-          <div style={{ height: "18px" }} />
-          <div className="rp-toolbar">
-            <div className="rp-chip-row">
-              <Badge status={detail?.thread.status ?? "pending"}>
-                {detail?.thread.status ?? "pending"}
-              </Badge>
-              {detail?.thread.codexSessionId ? (
-                <span className="rp-chip rp-mono">
-                  {detail.thread.codexSessionId}
-                </span>
-              ) : (
-                <span className="rp-chip">No Codex session yet</span>
-              )}
-            </div>
-            <Link href="/" className="rp-link">
-              Back to dashboard
-            </Link>
-          </div>
-        </section>
-
-        <div className="rp-grid-two">
-          <Panel
-            title="Workspace"
-            subtitle={
-              detail
-                ? `Root: ${detail.thread.workspaceRoot}`
-                : "Hydrating workspace details"
-            }
-          >
-            <div className="rp-chip-row">
-              {detail?.environments.map((environment) => {
-                const workspace = workspaceMap.get(environment.id);
-                return (
-                  <span key={environment.id} className="rp-chip">
-                    {environment.name}
-                    <Badge
-                      status={
-                        workspace?.materializationStatus ?? environment.status
-                      }
-                    >
-                      {workspace?.materializationStatus ?? environment.status}
-                    </Badge>
-                  </span>
-                );
-              })}
-            </div>
-            <div style={{ height: "18px" }} />
-            <div className="rp-stack-sm">
-              {detail?.threadEnvironments.map((item) => (
-                <div
-                  key={item.environmentId}
-                  className="rp-list-button"
-                  data-active="false"
-                >
-                  <strong className="rp-mono">
-                    {item.workspacePath || "Awaiting materialization"}
-                  </strong>
-                  <div className="rp-meta">
-                    <span>{item.materializationStatus}</span>
-                    <span>{formatDate(item.updatedAt)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Stream"
-            subtitle="Live session events, workspace prep milestones, and assistant deltas."
-          >
-            <div className="rp-stack">
-              <Tabs
-                value={streamTab}
-                onChange={setStreamTab}
-                items={[
-                  { value: "chat", label: "Chat" },
-                  { value: "log", label: "Event log" },
-                ]}
-              />
-              {streamTab === "chat" ? (
-                <div className="rp-chat">
-                  {messages.map((message) => (
-                    <article
-                      key={message.id}
-                      className="rp-message"
-                      data-role={message.role}
-                    >
-                      <div className="rp-message-role">{message.role}</div>
-                      <div className="rp-message-content">
-                        {message.content}
-                      </div>
-                    </article>
-                  ))}
-                  {streamingAssistant ? (
-                    <article className="rp-message" data-role="assistant">
-                      <div className="rp-message-role">
-                        assistant (streaming)
-                      </div>
-                      <div className="rp-message-content">
-                        {streamingAssistant}
-                      </div>
-                    </article>
-                  ) : null}
-                  {messages.length === 0 && !streamingAssistant ? (
-                    <div className="rp-empty">
-                      No messages yet. Once the workspace is ready, send your
-                      first prompt.
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="rp-log">
-                  {streamLog.length > 0
-                    ? streamLog.join("\n")
-                    : "Waiting for stream events…"}
-                </div>
-              )}
-            </div>
-          </Panel>
-        </div>
-
-        <Panel
-          title="Composer"
-          subtitle="Messages execute inside the thread workspace root."
-        >
-          <form className="rp-stack" onSubmit={handleSendMessage}>
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Ask Codex to coordinate changes across the selected repositories."
-            />
-            <div className="rp-toolbar">
-              <span className="rp-note">
-                Network stays enabled. Writes are limited to the workspace
-                materialized for this thread.
+    <div className="rp-chat-layout">
+      <header className="rp-chat-header">
+        <div className="rp-chat-header-title">
+          <h2>{detail?.thread.title ?? "Loading workspace…"}</h2>
+          <div className="rp-chip-row">
+            <Badge status={detail?.thread.status ?? "pending"}>
+              {detail?.thread.status ?? "pending"}
+            </Badge>
+            {detail?.thread.codexSessionId ? (
+              <span className="rp-chip rp-mono">
+                {detail.thread.codexSessionId.slice(0, 8)}
               </span>
-              <Button
-                type="submit"
-                disabled={sending || detail?.thread.status !== "ready"}
-              >
-                {sending ? "Dispatching…" : "Send prompt"}
-              </Button>
-            </div>
-          </form>
-        </Panel>
+            ) : null}
+          </div>
+        </div>
+        <div className="rp-chat-header-actions">
+           <Button tone="ghost" onClick={() => setShowDetails(!showDetails)}>
+             {showDetails ? "Hide environments" : "Show environments"}
+           </Button>
+        </div>
+      </header>
 
-        {error ? (
-          <Panel
-            title="Problem"
-            subtitle="The latest API or stream error is shown here."
-          >
-            <div className="rp-empty">{error}</div>
-          </Panel>
-        ) : null}
+      {showDetails && (
+         <div className="rp-chat-details-panel">
+            <div className="rp-stack-sm" style={{ padding: "16px", background: "var(--surface-panel)", borderBottom: "1px solid var(--border-soft)", fontSize: "0.9em" }}>
+               <h4>Workspace Roots & Environments</h4>
+               <p className="rp-mono" style={{ color: "var(--text-secondary)" }}>Root: {detail?.thread.workspaceRoot || "Awaiting"}</p>
+               <div className="rp-chip-row">
+                 {detail?.environments.map((environment) => {
+                   const workspace = workspaceMap.get(environment.id);
+                   return (
+                     <span key={environment.id} className="rp-chip">
+                       {environment.name} • {workspace?.materializationStatus ?? environment.status}
+                     </span>
+                   );
+                 })}
+               </div>
+            </div>
+         </div>
+      )}
+
+      {error ? (
+        <div className="rp-chat-error">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="rp-chat-scroll-area">
+        <div className="rp-chat-messages">
+          {messages.length === 0 && !streamingAssistant ? (
+            <div className="rp-chat-empty">
+               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-secondary)", marginBottom: "16px" }}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+               <h3>Get started with {detail?.thread.title}</h3>
+               <p>Send a prompt to orchestrate changes across the selected environments.</p>
+            </div>
+          ) : null}
+
+          {messages.map((message) => (
+             <div key={message.id} className={`rp-chat-message-row ${message.role}`}>
+               <div className="rp-chat-message-bubble">
+                  {message.role === "assistant" && <div className="rp-message-role">Relay Plus</div>}
+                  <div className="rp-message-content">{message.content}</div>
+               </div>
+             </div>
+          ))}
+
+          {streamingAssistant ? (
+             <div className="rp-chat-message-row assistant">
+               <div className="rp-chat-message-bubble streaming">
+                  <div className="rp-message-role">Relay Plus (streaming)</div>
+                  <div className="rp-message-content">{streamingAssistant}</div>
+               </div>
+             </div>
+          ) : null}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
-    </main>
+
+      <div className="rp-chat-composer-area">
+        <form className="rp-chat-composer-form" onSubmit={handleSendMessage}>
+          <textarea
+             className="rp-chat-input"
+             value={draft}
+             onChange={(event) => setDraft(event.target.value)}
+             placeholder="Message Relay Plus..."
+             onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                   e.preventDefault();
+                   if (!sending && detail?.thread.status === "ready") {
+                      e.currentTarget.form?.requestSubmit();
+                   }
+                }
+             }}
+          />
+          <div className="rp-chat-composer-actions">
+            <span className="rp-note" style={{ fontSize: "0.8em" }}>
+              Press Enter to send. Shift+Enter for newline.
+            </span>
+            <Button
+              type="submit"
+              disabled={sending || detail?.thread.status !== "ready"}
+            >
+              {sending ? "Sending..." : "Send"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

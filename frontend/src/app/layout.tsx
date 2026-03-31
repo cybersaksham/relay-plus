@@ -19,6 +19,9 @@ export const metadata: Metadata = {
     "Local-first AI workspace orchestration for multi-repository systems work.",
 };
 
+import { AppContextProvider } from "@/lib/app-context";
+import { AppShell } from "@/components/app-shell";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,7 +29,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <AppContextProvider>
+          <AppShell>{children}</AppShell>
+        </AppContextProvider>
+      </body>
     </html>
   );
 }
